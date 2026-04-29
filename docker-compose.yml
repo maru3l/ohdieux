@@ -1,0 +1,11 @@
+services:
+  ohdieux:
+    build: .
+    container_name: ohdieux
+    environment:
+      PORT: "8080"
+      PUBLIC_URL: http://localhost:8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data

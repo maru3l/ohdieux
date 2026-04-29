@@ -5,6 +5,20 @@ This setup is fine for simple local deployments. See [Production
 Considerations](#production-considerations) to configure a production
 deployment.
 
+## Local Development with Docker Compose
+
+Build and run locally with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+This will:
+
+- build the image from the local source tree
+- expose the app on `http://localhost:8080`
+- persist local data in `./data`
+
 0. Build the docker image.
 ```bash
 docker build . -t ohdieux:latest
@@ -86,6 +100,5 @@ Environment variables are defined and used in [application.conf](/src/main/resou
 | MANIFEST_SERVE_MEDIA        | Whether to serve audio files from archive instead of upstream CDN. (true/false)   | `false`                             |
 | MANIFEST_IMAGE_BASE_URL     | Override image archive public URL. (Advanced deployments only.)                   | `${PUBLIC_URL}/media/image/`        |
 | MANIFEST_AUDIO_BASE_URL     | Override audio archive public URL. (Advanced deployments only.)                   | `${PUBLIC_URL}/media/audio/`        |
-
 
 
