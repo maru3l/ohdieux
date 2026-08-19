@@ -1,71 +1,84 @@
 # Déploiement autogéré
 
 ## Déploiement de base
-Ce déploiement est adéquat pour un environment local. Voir [Considérations de
-production](#considérations-de-production) pour configurer un
-déploiment de production.
 
-0. Créer l'image docker
-```bash
-docker build . -t ohdieux:latest
-```
-1. Créer un container docker
-```bash
-docker run --restart always \
-  -p 8080:8080 \
-  -e PORT=8080 \
-  -e PUBLIC_URL="http://<my-accessible-ip>:8080" \
-  -v ./data:/data \
-  --name ohdieux \
-  ohdieux:latest
-```
-2. Rendez vous au `http://localhost:8080/admin` pour ajouter de
-   nouveaux programmes.
+Ce déploiement est adéquat pour un environnement local. Voir [Considérations de
+production](#considérations-de-production) pour configurer un
+déploiement de production.
+
+1. Créez le fichier d'environnement local et configurez `PUBLIC_URL` avec
+   l'URL depuis laquelle les utilisateurs accéderont à Ohdieux.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Construisez et démarrez le service.
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+3. Vérifiez que le conteneur est sain.
+
+   ```bash
+   docker compose ps
+   ```
+
+4. Rendez-vous au `http://localhost:8080/admin` pour ajouter de nouveaux
+   programmes.
+
+Compose stocke la base de données et les fichiers archivés dans le volume nommé
+`ohdieux-data`. `docker compose down` conserve ce volume; `docker compose down
+-v` le supprime définitivement.
 
 ## Déploiement simple (avec archive média)
+
 Ce déploiement sauvegarde les fichiers audio de chaque épisode découvert.
-**Assurez-vous d'avoir beaucoup d'espace de disque disponible.***
+**Assurez-vous d'avoir beaucoup d'espace disque disponible.**
+
+Configurez les valeurs suivantes dans `.env`, puis recréez le service :
+
+```dotenv
+ARCHIVE_MEDIA=true
+MANIFEST_SERVE_IMAGES=true
+MANIFEST_SERVE_MEDIA=true
+SCRAPER_AUTO_ADD_PROGRAMME=false
+```
 
 ```bash
-docker run --restart always \
-  -p 8080:8080 \
-  -e PORT=8080 \
-  -e PUBLIC_URL="http://<my-accessible-ip>:8080" \
-  -e ARCHIVE_MEDIA=true \
-  -e MANIFEST_SERVE_IMAGES=true \
-  -e MANIFEST_SERVE_MEDIA=true \
-  -v ./data:/data \
-  --name ohdieux \
-  ohdieux:latest
+docker compose up -d
 ```
 
 ## Considérations de production
-* Le tableau de bord d'administrateur est disponible sous le chemin
+
+- Le tableau de bord d'administrateur est disponible sous le chemin
   `/admin` **sans authentification**. Assurez-vous de restreindre
   l'accès au routes sous `/admin/**` si votre serveur est exposé à l'internet.
-  ```
+
+  ```nginx
   # exemple pour nginx
   location ~* /admin {
       return 403;
   }
   ```
-  
-* Par défaut, Ohdieux ajoute à sa base de données tous les programmes
+
+- Par défaut, Ohdieux ajoute à sa base de données tous les programmes
   demandés sur la route `/rss`. Si vous utilisez la fonctionnalité
   d'archivage média, il est **fortement recommandé** de désactiver
   cette fonctionnalité en assignant la valeur `false` à la variable
   `SCRAPER_AUTO_ADD_PROGRAMME` pour éviter de remplir votre disque dur.
 
-* Par défault, Ohdieux utilise une base de données SQLite. Considérez
+- Par défault, Ohdieux utilise une base de données SQLite. Considérez
   l'utilisation d'un autre pilote JDBC ou un _load balancer_ avec une
   fonction de cache pour servir un grand nombre de requêtes.
 
-
 ## Variables d'environnement
+
 Les variables d'environnement sont définies dans [application.conf](/src/main/resources/application.conf).
 
 | Environment variable        | Description                                                                               | Default value                             |
-|-----------------------------|-------------------------------------------------------------------------------------------|-------------------------------------------|
+| --------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------- |
 | PORT                        | Port d'écoute                                                                             | 9000                                      |
 | HTTP_ADDRESS                | Address réseau d'écoute                                                                   | 0.0.0.0                                   |
 | DATA_DIR                    | Dossier de base pour les données locales.                                                 | `./` localement, `/data/` dans docker.    |
@@ -87,6 +100,3 @@ Les variables d'environnement sont définies dans [application.conf](/src/main/r
 | MANIFEST_SERVE_MEDIA        | Servir les fichiers audio depuis l'archive locale. (true/false)                           | `false`                                   |
 | MANIFEST_IMAGE_BASE_URL     | Configuration manuelle de l'URL de base pour les images à servir (déploiements avancés)   | `${PUBLIC_URL}/media/image/`              |
 | MANIFEST_AUDIO_BASE_URL     | Configuration manuelle de l'URL de base pour les fichiers audio (déploiement avancés)     | `${PUBLIC_URL}/media/audio/`              |
-
-
-
