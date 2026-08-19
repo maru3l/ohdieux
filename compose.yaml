@@ -1,0 +1,25 @@
+services:
+  ohdieux:
+    image: ${OHDIEUX_IMAGE:-ohdieux:latest}
+    build:
+      context: .
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${OHDIEUX_BIND_ADDRESS:-0.0.0.0}:${OHDIEUX_PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      HTTP_ADDRESS: "0.0.0.0"
+      DATA_DIR: "/data/"
+      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
+      ARCHIVE_MEDIA: "${ARCHIVE_MEDIA:-false}"
+      MANIFEST_SERVE_IMAGES: "${MANIFEST_SERVE_IMAGES:-false}"
+      MANIFEST_SERVE_MEDIA: "${MANIFEST_SERVE_MEDIA:-false}"
+      SCRAPER_AUTO_ADD_PROGRAMME: "${SCRAPER_AUTO_ADD_PROGRAMME:-true}"
+    volumes:
+      - ohdieux-data:/data
+
+volumes:
+  ohdieux-data:
