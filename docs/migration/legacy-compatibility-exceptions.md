@@ -1,6 +1,6 @@
 # Legacy compatibility exceptions
 
-This decision resolves [issue #15](https://github.com/maru3l/ohdieux/issues/15) against the [observable compatibility contract](https://github.com/maru3l/ohdieux/blob/25a3f7429146eb54cbd7f2418464fdfdbff305bf/docs/migration/observable-compatibility-contract.md).
+This decision resolves [issue #15](https://github.com/maru3l/ohdieux/issues/15) against the [observable compatibility contract](observable-compatibility-contract.md).
 
 The TypeScript migration preserves strict client-visible and persisted-data semantics. Confirmed behavior in the compatibility contract remains required unless this document or the separately resolved audio-archival decision grants an explicit exception. Implementation work must not introduce additional compatibility exceptions ad hoc.
 
@@ -62,7 +62,7 @@ Preserve:
 1. **XML byte serialization** — RSS output may differ in insignificant serialization whitespace and equivalent XML declaration formatting. Semantic XML and stable HTTP metadata remain strict.
 2. **Scheduling configuration** — Cloudflare production accepts `SCRAPER_REFRESH_INTERVAL=0` (disabled) or `3600` (hourly). Any other value fails configuration validation. Arbitrary-second intervals and exact process-local actor/tick timing are unsupported.
 3. **Silent scrape failures** — first-page fetch or parse failures and later pagination failures produce an explicit `Failed` outcome. Data durably saved by earlier successful pages remains; failures are not silently ignored or treated as successful truncation.
-4. **Scraper crashes and redundant I/O** — all-replay pages use normal traversal order instead of crashing. Any empty page saves programme metadata, retains data from earlier successful pages, and ends traversal successfully without episode work for that page. Unknown upstream types and decode failures become controlled failures. Traversal does not make the legacy redundant page request after the final item.
+4. **Scraper crashes and redundant I/O** — all-replay pages use normal traversal order instead of crashing. An empty first page deliberately differs from Scala: Scala throws while inferring order, before saving the fetched programme metadata, whereas TypeScript saves that metadata, retains existing episode data, and ends traversal successfully without episode work. Empty later pages retain data from earlier successful pages and also end traversal successfully. Unknown upstream types and decode failures become controlled failures. Traversal does not make the legacy redundant page request after the final item.
 5. **Actor timing and races** — background work uses durable, at-least-once, idempotent queue delivery. Exact actor concurrency, delivery timing, and archive-before-media-save races are not preserved. Durable state is saved before dependent work is enqueued.
 6. **Image archival mechanism** — Cloudflare streams image fetches into R2 instead of invoking `wget` through temporary files. The exact command arguments, temporary filenames, and partial temporary-file residue are not preserved. User agent, stored bytes, no-replacement behavior, and observable success or failure remain required.
 7. **Blacklist URL refresh** — URL-refresh behavior that occurs only when audio archival is enabled is covered by the separate unsupported-audio-archive exception and is not independently preserved on Cloudflare.
@@ -79,7 +79,8 @@ Golden-master acceptance must:
 
 - treat every compatibility-contract behavior not excepted above as required parity;
 - compare RSS as parsed, namespace-aware XML while separately checking stable element order and HTTP metadata;
-- assert explicit failed states for first-page and later-page failures;
+- assert explicit failed states for first-page and later-page fetch, parse, and decode failures;
+- keep the `RC-01` empty-first-page oracle paired and classified: Scala throws before saving fetched programme metadata and records `Failed`; TypeScript is an `explicit-exception` that saves metadata and succeeds without episode work;
 - assert non-crashing all-replay and empty-page outcomes and absence of the redundant terminal request;
 - test only disabled and hourly Cloudflare schedules and reject other interval values;
 - verify duplicate queue delivery is idempotent and dependent work follows durable state; and
