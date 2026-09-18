@@ -1,0 +1,17 @@
+{
+  "name": "ohdieux-atomic-d1-commit-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "check": "tsc --noEmit",
+    "proof:local": "node run-proof.mjs http://127.0.0.1:8787",
+    "deploy": "wrangler deploy",
+    "proof:remote": "node run-proof.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "latest",
+    "wrangler": "latest"
+  }
+}
