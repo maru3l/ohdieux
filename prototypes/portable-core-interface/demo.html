@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portable-core interface prototype</title>
+  <style>
+    :root { color-scheme: light; --ink:#17202a; --muted:#667085; --line:#d8dee8; --paper:#f6f8fb; --card:#fff; --accent:#0f766e; --danger:#b42318; --warn:#b54708; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:var(--paper); }
+    main { width:min(1180px,calc(100% - 32px)); margin:36px auto 72px; }
+    h1,h2,h3 { line-height:1.2; margin:0 0 12px; }
+    h1 { font-size:clamp(28px,4vw,44px); letter-spacing:-.035em; }
+    h2 { margin-top:34px; font-size:23px; }
+    h3 { font-size:16px; }
+    p { margin:8px 0; }
+    .eyebrow { color:var(--accent); font-weight:750; letter-spacing:.08em; text-transform:uppercase; font-size:12px; }
+    .lede { max-width:820px; font-size:18px; color:#344054; }
+    .notice { margin:20px 0; padding:14px 16px; border-left:4px solid var(--warn); background:#fffaeb; }
+    .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
+    .card { grid-column:span 4; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; min-width:0; }
+    .card.wide { grid-column:span 8; }
+    .card.full { grid-column:1/-1; }
+    .label { color:var(--muted); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .value { margin-top:4px; font-size:18px; font-weight:700; overflow-wrap:anywhere; }
+    .good { color:var(--accent); } .bad { color:var(--danger); } .warn { color:var(--warn); }
+    button { border:1px solid #b8c2d1; border-radius:9px; background:#fff; color:var(--ink); padding:9px 12px; font:inherit; font-weight:650; cursor:pointer; }
+    button:hover { border-color:var(--accent); color:var(--accent); }
+    button.primary { color:#fff; background:var(--accent); border-color:var(--accent); }
+    button.danger { color:var(--danger); }
+    button:disabled { opacity:.42; cursor:not-allowed; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; }
+    .tabs { display:flex; gap:6px; overflow:auto; margin:0 0 14px; padding-bottom:3px; }
+    .tabs button[aria-selected="true"] { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .scenario { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px; }
+    .steps { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:14px; }
+    .step { display:flex; align-items:center; gap:7px; }
+    .step:not(:last-child)::after { content:"→"; color:#98a2b3; font-weight:800; margin-left:2px; }
+    .step-number { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#e7f5f2; color:var(--accent); font-size:12px; font-weight:800; }
+    table { width:100%; border-collapse:collapse; margin-top:6px; font-size:14px; }
+    th,td { padding:7px 8px; text-align:left; border-bottom:1px solid #edf0f4; vertical-align:top; }
+    th { color:var(--muted); font-size:12px; }
+    ul { margin:6px 0; padding-left:20px; }
+    .log { max-height:260px; overflow:auto; margin:0; padding:0; list-style:none; }
+    .log li { padding:8px 0; border-bottom:1px solid #edf0f4; }
+    .log time { color:var(--muted); font-variant-numeric:tabular-nums; margin-right:8px; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.92em; }
+    pre { overflow:auto; padding:16px; border-radius:10px; background:#111827; color:#e5e7eb; font-size:13px; }
+    a { color:var(--accent); }
+    @media (max-width:800px) { .card,.card.wide { grid-column:1/-1; } main { width:min(100% - 20px,1180px); } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Prototype · throwaway planning evidence</div>
+  <h1>Can this contract survive the awkward cases?</h1>
+  <p class="lede">This demo tests whether the proposed portable <code>Ohdieux</code> interface is sufficient for atomic admissions, duplicate delivery, durable retries, sticky programme failures, and separately-idempotent R2 writes—without exposing Hono or Cloudflare types.</p>
+  <div class="notice"><strong>Question being prototyped:</strong> does the combination of intent-shaped facets, read-only repositories, one atomic <code>commit(changeSet)</code> seam, closed outcomes, and <code>ack | retry | discard</code> dispositions remove implementation ambiguity? The R2 write versus <code>halted</code> race is intentionally left visible for human decision.</div>
+
+  <h2>Current state</h2>
+  <div id="state" class="grid" aria-live="polite"></div>
+
+  <h2>Free play</h2>
+  <div id="free-play" class="controls"></div>
+
+  <h2>Guided walkthroughs</h2>
+  <div id="tabs" class="tabs" role="tablist"></div>
+  <section id="scenario" class="scenario"></section>
+
+  <h2>Proposed external seam</h2>
+  <p>The complete declaration-only artifact is in <a href="contract.ts"><code>contract.ts</code></a>. The public surface stays small; orchestration remains behind it.</p>
+  <pre><code>interface Ohdieux {
+  feeds: { read(input: ReadFeed): Promise&lt;FeedOutcome&gt; };
+  media: {
+    readImage(input: ReadImage): Promise&lt;ImageOutcome&gt;;
+    readAudio(input: ReadAudio): Promise&lt;AudioOutcome&gt;;
+  };
+  administration: Administration;
+  schedule: { hourly(input: HourlyTick): Promise&lt;ScheduleOutcome&gt; };
+  jobs: { consume(envelope: unknown): Promise&lt;JobDisposition&gt; };
+}
+
+type JobDisposition =
+  | { kind: "ack"; reason: AckReason }
+  | { kind: "retry"; failure: RuntimeFailure }
+  | { kind: "discard"; diagnostic: ClassifiedCondition };</code></pre>
+</main>
+
+<script>
+// Pure in-memory model. It has no DOM dependency and can be lifted out of this page.
+const ContractModel = (() => {
+  const initialState = () => ({
+    clock: 0,
+    lifecycle: "active",
+    d1Available: true,
+    programmeStatus: "Ok",
+    programmeRevision: 0,
+    episodes: [],
+    jobs: {
+      "page-1": { kind: "programme-page", state: "leased", attempt: 0, lease: "lease-page" },
+      "media-1": { kind: "episode-media", state: "leased", attempt: 5, lease: "lease-media" },
+      "image-1": { kind: "image-archive", state: "ready", attempt: 0, lease: null }
+    },
+    roots: {},
+    receipts: {},
+    outbox: {},
+    archiveImage: false,
+    imageEffectStarted: false,
+    lastCommit: "none",
+    lastHttp: "none",
+    lastDisposition: "none",
+    lastQuestion: "none",
+    events: []
+  });
+
+  const clone = value => structuredClone(value);
+  const stamp = state => String(++state.clock).padStart(2, "0");
+  const record = (state, text) => state.events.unshift({ at: stamp(state), text });
+
+  function commit(state, plan) {
+    if (!state.d1Available) {
+      state.lastCommit = "failure · D1 unavailable · no writes";
+      record(state, `Commit ${plan.id} failed before a durable disposition.`);
+      return { kind: "failure", code: "d1-transient" };
+    }
+
+    if (plan.receipt) {
+      const existing = state.receipts[plan.receipt.id];
+      if (existing) {
+        if (existing.fingerprint !== plan.receipt.fingerprint) {
+          state.lastCommit = "conflict · receipt fingerprint mismatch · no writes";
+          record(state, `Commit ${plan.id} reused an idempotency key with different work.`);
+          return { kind: "conflict", reason: "receipt-fingerprint-mismatch" };
+        }
+        state.lastCommit = "duplicate · original receipt and outbox returned";
+        record(state, `Commit ${plan.id} was a duplicate; no effect repeated.`);
+        return { kind: "duplicate", receipt: existing };
+      }
+    }
+
+    const failed = (plan.preconditions || []).filter(p => {
+      if (p.kind === "lifecycle") return !p.allowed.includes(state.lifecycle);
+      if (p.kind === "job-state") return state.jobs[p.jobId]?.state !== p.expected;
+      if (p.kind === "lease") return state.jobs[p.jobId]?.lease !== p.token;
+      return false;
+    });
+
+    if (failed.length) {
+      state.lastCommit = `conflict · ${failed.map(x => x.kind).join(", ")} · no writes`;
+      record(state, `Commit ${plan.id} lost a precondition; every proposed write was rolled back.`);
+      return { kind: "conflict", failed };
+    }
+
+    (plan.apply || (() => {}))(state);
+    if (plan.receipt) state.receipts[plan.receipt.id] = plan.receipt;
+    for (const message of plan.outbox || []) state.outbox[message.id] = message;
+    state.lastCommit = "applied · changes + receipt + outbox committed together";
+    record(state, `Commit ${plan.id} applied atomically.`);
+    return { kind: "applied" };
+  }
+
+  function reduce(previous, action) {
+    if (action.type === "reset") return initialState();
+    const state = clone(previous);
+
+    switch (action.type) {
+      case "toggle-d1":
+        state.d1Available = !state.d1Available;
+        record(state, `D1 is now ${state.d1Available ? "available" : "unavailable"}.`);
+        return state;
+
+      case "admin-refresh": {
+        const result = commit(state, {
+          id: "admit:req-admin-1",
+          receipt: { id: "req-admin-1", fingerprint: "refresh:42:full", outcome: "accepted" },
+          preconditions: [{ kind: "lifecycle", allowed: ["active"] }],
+          outbox: [{ id: "outbox:root-admin-1", envelope: "job:root-admin-1" }],
+          apply(s) {
+            s.roots["root-admin-1"] = "admitted";
+            s.jobs["root-admin-1"] = { kind: "programme-page", state: "ready", attempt: 0, lease: null };
+          }
+        });
+        state.lastHttp = result.kind === "applied" || result.kind === "duplicate" ? "200 ok" : "500 error";
+        return state;
+      }
+
+      case "missing-feed": {
+        const result = commit(state, {
+          id: "admit:req-feed-1",
+          receipt: { id: "req-feed-1", fingerprint: "auto-add:404", outcome: "accepted" },
+          preconditions: [{ kind: "lifecycle", allowed: ["active"] }],
+          outbox: [{ id: "outbox:auto-add-1", envelope: "job:auto-add-1" }],
+          apply(s) { s.roots["auto-add-1"] = "admitted"; }
+        });
+        state.lastHttp = "404 not found";
+        record(state, result.kind === "failure" ? "Auto-add admission failed, but feed absence still maps to 404." : "Missing feed admitted auto-add work and still maps to 404.");
+        return state;
+      }
+
+      case "page-success": {
+        const result = commit(state, {
+          id: "complete:page-1",
+          receipt: { id: "job:page-1", fingerprint: "page-1:attempt-0", outcome: "succeeded" },
+          preconditions: [
+            { kind: "lifecycle", allowed: ["active", "quiescing"] },
+            { kind: "job-state", jobId: "page-1", expected: "leased" },
+            { kind: "lease", jobId: "page-1", token: "lease-page" }
+          ],
+          outbox: [
+            { id: "outbox:media-episode-101", envelope: "job:media-episode-101" },
+            { id: "outbox:image-42", envelope: "job:image-42" }
+          ],
+          apply(s) {
+            s.programmeRevision += 1;
+            if (!s.episodes.includes(101)) s.episodes.push(101);
+            s.jobs["page-1"].state = "succeeded";
+          }
+        });
+        state.lastDisposition = result.kind === "failure" ? "retry · disposition not durable" : "ack · completed";
+        return state;
+      }
+
+      case "page-transient": {
+        const result = commit(state, {
+          id: "retry:page-1:1",
+          receipt: { id: "job:page-1:attempt-1", fingerprint: "transient:deadline", outcome: "retry-wait" },
+          preconditions: [
+            { kind: "lifecycle", allowed: ["active", "quiescing"] },
+            { kind: "job-state", jobId: "page-1", expected: "leased" }
+          ],
+          outbox: [{ id: "outbox:retry-page-1", envelope: "job:page-1@+30s" }],
+          apply(s) { s.jobs["page-1"] = { ...s.jobs["page-1"], state: "retry-wait", attempt: 1, lease: null }; }
+        });
+        state.lastDisposition = result.kind === "failure" ? "retry · D1 could not persist bookkeeping" : "ack · retry scheduled durably";
+        return state;
+      }
+
+      case "malformed-envelope":
+        state.lastDisposition = "discard · malformed envelope";
+        record(state, "Core rejected the untyped Queue body; adapter acknowledges it.");
+        return state;
+
+      case "permanent-page-failure": {
+        const result = commit(state, {
+          id: "fail:page-1",
+          receipt: { id: "job:page-1:terminal", fingerprint: "schema-invalid", outcome: "failed" },
+          preconditions: [{ kind: "job-state", jobId: "page-1", expected: "leased" }],
+          outbox: [],
+          apply(s) { s.jobs["page-1"].state = "failed"; s.programmeStatus = "Failed"; }
+        });
+        state.lastDisposition = result.kind === "failure" ? "retry" : "ack · terminal; programme Failed";
+        return state;
+      }
+
+      case "terminal-media-failure": {
+        const result = commit(state, {
+          id: "fail:media-1",
+          receipt: { id: "job:media-1:terminal", fingerprint: "attempts-exhausted", outcome: "failed" },
+          preconditions: [{ kind: "job-state", jobId: "media-1", expected: "leased" }],
+          outbox: [],
+          apply(s) { s.jobs["media-1"].state = "failed"; }
+        });
+        state.lastDisposition = result.kind === "failure" ? "retry" : "ack · terminal; programme remains Ok";
+        return state;
+      }
+
+      case "authorize-image": {
+        const result = commit(state, {
+          id: "lease:image-1",
+          preconditions: [
+            { kind: "lifecycle", allowed: ["active", "quiescing"] },
+            { kind: "job-state", jobId: "image-1", expected: "ready" }
+          ],
+          apply(s) { s.jobs["image-1"] = { ...s.jobs["image-1"], state: "leased", lease: "lease-image" }; }
+        });
+        if (result.kind === "applied") { state.imageEffectStarted = true; record(state, "Image stream began after durable execution authorization."); }
+        return state;
+      }
+
+      case "halt":
+        state.lifecycle = "halted";
+        record(state, "Lifecycle changed to halted; new execution and image writes are forbidden.");
+        return state;
+
+      case "finish-image":
+        if (!state.imageEffectStarted) {
+          record(state, "No image effect has started.");
+        } else if (state.lifecycle === "halted") {
+          state.archiveImage = true;
+          state.lastQuestion = "An R2 put started before halt may finish after halt. Is that accepted containment semantics?";
+          record(state, "Cross-product race exposed: D1 cannot revoke an already-started R2 stream.");
+        } else {
+          state.archiveImage = true;
+          record(state, "Revision-zero image was created in R2.");
+        }
+        return state;
+
+      case "complete-image": {
+        const result = commit(state, {
+          id: "complete:image-1",
+          receipt: { id: "job:image-1", fingerprint: "image:created-or-present", outcome: "succeeded" },
+          preconditions: [
+            { kind: "lifecycle", allowed: ["active", "quiescing"] },
+            { kind: "job-state", jobId: "image-1", expected: "leased" }
+          ],
+          outbox: [],
+          apply(s) { s.jobs["image-1"].state = "succeeded"; s.imageEffectStarted = false; }
+        });
+        state.lastDisposition = result.kind === "failure" ? "retry · R2 outcome not recorded" : result.kind === "conflict" ? "ack/defer · lifecycle changed" : "ack · image outcome durable";
+        return state;
+      }
+    }
+
+    return state;
+  }
+
+  return { initialState, reduce };
+})();
+
+const actions = [
+  ["admin-refresh", "Admit admin refresh"],
+  ["missing-feed", "Read missing feed"],
+  ["page-success", "Complete programme page"],
+  ["page-transient", "Record transient retry"],
+  ["terminal-media-failure", "Exhaust media job"],
+  ["permanent-page-failure", "Fail programme page"],
+  ["malformed-envelope", "Consume malformed envelope"],
+  ["authorize-image", "Authorize image effect"],
+  ["finish-image", "Finish R2 put"],
+  ["complete-image", "Record image outcome"],
+  ["toggle-d1", "Toggle D1"],
+  ["halt", "Enter halted"],
+  ["reset", "Reset"]
+];
+
+const scenarios = [
+  {
+    title: "Durable admin admission",
+    description: "The route may return 200 only after the root, request receipt, and first outbox prompt are atomic. Repeat the same identity to see duplicate safety.",
+    steps: [["admin-refresh","Admit refresh"],["admin-refresh","Repeat same request"]]
+  },
+  {
+    title: "Missing feed when D1 fails",
+    description: "A first unknown feed still returns 404 because that response describes absence, not accepted work. Failed admission is diagnostic only.",
+    steps: [["toggle-d1","Make D1 unavailable"],["missing-feed","Read missing feed"]]
+  },
+  {
+    title: "Application retry vs Queue retry",
+    description: "A transient upstream failure is acknowledged only if retry_wait and its prompt become durable. Otherwise the transport message must retry natively.",
+    steps: [["page-transient","Persist retry_wait"],["reset","Reset"],["toggle-d1","Make D1 unavailable"],["page-transient","Try to persist retry_wait"]]
+  },
+  {
+    title: "Sticky failure boundary",
+    description: "Only programme-page upstream failure may set sticky Failed. Episode-media exhaustion terminates its job/root but does not suppress future roots.",
+    steps: [["terminal-media-failure","Exhaust media work"],["reset","Reset"],["permanent-page-failure","Fail programme page"]]
+  },
+  {
+    title: "R2 and halted race",
+    description: "D1 can authorize an image job, but cannot atomically revoke an R2 stream already started by another product. This is the remaining human decision.",
+    steps: [["authorize-image","Authorize and start"],["halt","Enter halted"],["finish-image","Let in-flight put settle"],["complete-image","Try to record outcome"]]
+  }
+];
+
+let state = ContractModel.initialState();
+let activeScenario = 0;
+let scenarioProgress = 0;
+
+const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[ch]);
+
+function dispatch(type, guided = false) {
+  state = ContractModel.reduce(state, { type });
+  if (guided) scenarioProgress += 1;
+  render();
+}
+
+function tableRows(entries, empty) {
+  if (!entries.length) return `<p class="value">${escapeHtml(empty)}</p>`;
+  return `<table><tbody>${entries.map(([a,b]) => `<tr><th>${escapeHtml(a)}</th><td>${escapeHtml(b)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function renderState() {
+  const jobs = Object.entries(state.jobs).map(([id,j]) => [id, `${j.kind} · ${j.state} · attempt ${j.attempt}`]);
+  const receipts = Object.entries(state.receipts).map(([id,r]) => [id, r.outcome]);
+  const outbox = Object.entries(state.outbox).map(([id,m]) => [id, m.envelope]);
+  document.querySelector("#state").innerHTML = `
+    <article class="card"><div class="label">Lifecycle</div><div class="value ${state.lifecycle === "active" ? "good" : "warn"}">${escapeHtml(state.lifecycle)}</div></article>
+    <article class="card"><div class="label">D1</div><div class="value ${state.d1Available ? "good" : "bad"}">${state.d1Available ? "available" : "unavailable"}</div></article>
+    <article class="card"><div class="label">Programme 42</div><div class="value ${state.programmeStatus === "Ok" ? "good" : "bad"}">${escapeHtml(state.programmeStatus)} · revision ${state.programmeRevision}</div><p>Episodes: ${escapeHtml(state.episodes.join(", ") || "none")}</p></article>
+    <article class="card wide"><div class="label">Jobs</div>${tableRows(jobs,"none")}</article>
+    <article class="card"><div class="label">R2 image</div><div class="value">${state.archiveImage ? "revision zero present" : state.imageEffectStarted ? "write in flight" : "absent"}</div></article>
+    <article class="card wide"><div class="label">Receipts</div>${tableRows(receipts,"none")}</article>
+    <article class="card"><div class="label">Outbox</div>${tableRows(outbox,"none")}</article>
+    <article class="card"><div class="label">Last commit</div><div class="value">${escapeHtml(state.lastCommit)}</div></article>
+    <article class="card"><div class="label">HTTP outcome</div><div class="value">${escapeHtml(state.lastHttp)}</div></article>
+    <article class="card"><div class="label">Queue disposition</div><div class="value">${escapeHtml(state.lastDisposition)}</div></article>
+    <article class="card full"><div class="label">Open design question</div><div class="value ${state.lastQuestion === "none" ? "" : "warn"}">${escapeHtml(state.lastQuestion)}</div></article>
+    <article class="card full"><div class="label">Event log</div><ul class="log">${state.events.length ? state.events.map(e => `<li><time>${e.at}</time>${escapeHtml(e.text)}</li>`).join("") : "<li>No actions yet.</li>"}</ul></article>`;
+}
+
+function renderFreePlay() {
+  document.querySelector("#free-play").innerHTML = actions.map(([type,label]) => `<button class="${type === "reset" ? "danger" : ""}" data-action="${type}">${escapeHtml(label)}</button>`).join("");
+  document.querySelectorAll("#free-play button").forEach(button => button.addEventListener("click", () => dispatch(button.dataset.action)));
+}
+
+function renderScenario() {
+  document.querySelector("#tabs").innerHTML = scenarios.map((s,i) => `<button role="tab" aria-selected="${i === activeScenario}" data-tab="${i}">${escapeHtml(s.title)}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(button => button.addEventListener("click", () => {
+    activeScenario = Number(button.dataset.tab); scenarioProgress = 0; state = ContractModel.initialState(); render();
+  }));
+  const scenario = scenarios[activeScenario];
+  document.querySelector("#scenario").innerHTML = `<h3>${escapeHtml(scenario.title)}</h3><p>${escapeHtml(scenario.description)}</p><div class="steps">${scenario.steps.map(([type,label],i) => `<span class="step"><span class="step-number">${i+1}</span><button data-step="${i}" data-action="${type}" ${i === scenarioProgress ? "" : "disabled"}>${escapeHtml(label)}</button></span>`).join("")}</div>`;
+  document.querySelectorAll("#scenario button:not(:disabled)").forEach(button => button.addEventListener("click", () => dispatch(button.dataset.action, true)));
+}
+
+function render() { renderState(); renderFreePlay(); renderScenario(); }
+render();
+</script>
+</body>
+</html>
