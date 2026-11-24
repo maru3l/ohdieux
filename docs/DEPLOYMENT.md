@@ -88,4 +88,12 @@ Environment variables are defined and used in [application.conf](/src/main/resou
 | MANIFEST_AUDIO_BASE_URL     | Override audio archive public URL. (Advanced deployments only.)                   | `${PUBLIC_URL}/media/audio/`        |
 
 
+## Docker compose
+
+An easy way to setup the container is:
+
+```sh
+sudo ./prepare.sh # Create data directory and assign to right user/group
+docker compose up # Spin up the container (port 9000)
+```
 

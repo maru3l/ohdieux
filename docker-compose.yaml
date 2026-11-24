@@ -1,0 +1,21 @@
+services:
+  ohdieux:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ohdieux
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9000:9000"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    volumes:
+      - type: bind
+        source: ./data
+        target: /data
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
